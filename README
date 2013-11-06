@@ -1,0 +1,10 @@
+host_core provides a cluster friendly place to plug the various 
+data sources into.  These data sources include:
+
+	- isshd
+	- syslog reader
+	- auditd
+	-
+
+To install, just clone the host_core repo into the site directory.  
+Other data sources can be cloned into the same site directory.
