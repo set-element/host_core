@@ -4,7 +4,7 @@
 #  from the sshd and syslog policy.
 #
 # 
-@load sql
+@load host_core/sql_logger
 
 module USER_CORE;
 
