@@ -4,7 +4,7 @@
 #  from the sshd and syslog policy.
 #
 # 
-@load host_core/sql_logger
+@load host_core/user_hist_db
 
 module USER_CORE;
 
@@ -225,7 +225,7 @@ function user_history(ts: time, id: conn_id, uid: string, svc_name: string, svc_
 		# already seen, add the data and move on ...
 		++t_UR$from_net[t_net];
 		++t_UR$total;
-		#print fmt("UID: %s seen from net %s already %s times", uid,t_net,t_UR$total);
+		# print fmt("UID: %s seen from net %s already %s times", uid,t_net,t_UR$total);
 		}
 	else {
 		# the net not observed before for this uid
@@ -235,7 +235,7 @@ function user_history(ts: time, id: conn_id, uid: string, svc_name: string, svc_
 		if ( t_UR$total < uid_login_threshold ) {
 			t_UR$from_net[t_net] = 1;
 			++t_UR$total;
-			#print fmt("UID: %s new net %s", uid,t_net);
+			# print fmt("UID: %s new net %s", uid,t_net);
  			}
 		else {
 		# new data value, worth evaluating?  move this over to the user_policy.bro
@@ -254,11 +254,13 @@ function user_history(ts: time, id: conn_id, uid: string, svc_name: string, svc_
 			t_UR$from_net[t_net] = 1;
 			++t_UR$total;
 
-			#print fmt("new subnet %s for %s [%s]", uid, t_net, b);
+			# print fmt("new subnet %s for %s [%s]", uid, t_net, b);
 		}
 	}
 
 	uid_data[uid] = t_UR;
+
+	SQLITE::auth_wayback_transaction(ts, id, uid, svc_name, svc_type, svc_resp, svc_auth, data);
 
 	return ret_val;
 }
@@ -393,6 +395,7 @@ function user_postponed(ts: time, s_addr: addr, r_addr: addr, uid: string, data_
 #
 event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: string, svc_name: string, svc_type: string, svc_resp: string, svc_auth: string, data: string)
 {
+	# print fmt("IN CORE LOG TRANSACT");
 	# first normalize all the non-case sensitive informaiton
 	local t_svc_name = to_upper(svc_name);
 	local t_svc_type = to_upper(svc_type);
