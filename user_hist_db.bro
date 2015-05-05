@@ -28,8 +28,8 @@ export {
 	# net_count integer
 	# );
 
-	global user_data_db = "/home/scottc/development/SSHD_BRO/database/user_data.db" &redef;
-	global w_user_data_db = "/home/scottc/development/SSHD_BRO/database/w_user_data.db" &redef;
+	global user_data_db = "/home/scottc/development/SSHD_BRO_NEW/database/user_data.db" &redef;
+	global w_user_data_db = "/home/scottc/development/SSHD_BRO_NEW/database/w_user_data.db" &redef;
 
 	# this is for taking back data from the immediate query
 	# data here is raw
@@ -197,11 +197,11 @@ event line2(description: Input::EventDescription, tpe: Input::Event, r: Val)
 	t_sub = mask_addr(to_addr(orig_h), subnet_mask);
 	# lookup_location(addr) returns a type geo_location:
 	# type geo_location: record {
-        #	country_code: string &optional; ##< The country code.
-        #	region: string &optional;       ##< The region.
-        #	city: string &optional; ##< The city.
-        #	latitude: double &optional;     ##< Latitude.
-        #	longitude: double &optional;    ##< Longitude.
+        #	country_code: string &optional; #< The country code.
+        #	region: string &optional;       #< The region.
+        #	city: string &optional; #< The city.
+        #	latitude: double &optional;     #< Latitude.
+        #	longitude: double &optional;    #< Longitude.
 	# 	} &log;
 	t_geo = lookup_location(to_addr(orig_h));
 
