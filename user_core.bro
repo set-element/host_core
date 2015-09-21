@@ -99,6 +99,8 @@ export {
 	# Identifying maps between uid and authentication token requires a 
 	#   successful login for the information to be useful.  This is a table
 	#   to hold all authentication data for a short period of time.
+	# A fingerprint here means 
+	#
 	#  Map of session-key -> fingerprint
 	global uid_cred_cache: table[string] of string &write_expire=1 min &redef;
 	#  perminant uid <-> fingerprint set
@@ -449,6 +451,12 @@ event transaction_proxy_remove(auth_key: string)
 # service response ('ACCEPTED', 'FAILED' and 'POSTPONED') (prev called authmsg)
 #  the set can be extended via the usual event hyjinx...
 #
+# Since any number of entries can come rolling along for a given set of {uid,orig_h,orig_p} 
+#   both in terms of PAM fun as well as data coming in from both isshd and syslog
+#   we need a way to normalize this mess.  For now an auth_key is generated from these 
+#   values and passed on.  We wait on this value in the proxy table untill an "ACCEPTED"
+#   is seen or the timeout period happens (default FAIL).
+#
 event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: string, svc_name: string, svc_type: string, svc_resp: string, svc_auth: string, data: string)
 {
 	# first normalize all the non-case sensitive informaiton
@@ -456,6 +464,7 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 	local t_svc_type = to_upper(svc_type);
 	local t_svc_resp = to_upper(svc_resp);
 	local t_svc_auth = to_upper(svc_auth);
+
 	# used to filter and summeraze transaction_services
 	local process = T;
 
@@ -467,13 +476,18 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 		local auth_key = fmt("%s", sha1_hash(uid,id$orig_h,id$orig_p));
 
 		if ( auth_key in transaction_proxy ) {
+
 			t_apr = transaction_proxy[auth_key];
-			# If the 'success' value for the t_apr struct is 'T', then
-			#   the auth has been successful and we can just move along.
+
+			# If the svc_resp value for the t_apr struct has already been 
+			#   set to "ACCEPTED", then the auth has already been successful
+			#   and we can just move along wo/ further logging.
+			#   
 			#   The key remains in place to identify the session auth 
 			#   status has been set.
 			#
 			if ( t_apr$svc_resp == "ACCEPTED" ) {
+				# no additional logging
 				process = F;
 				}
 			else {
@@ -494,8 +508,8 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 			# update the stored struct
 			transaction_proxy[auth_key] = t_apr;
 			}
-		else {
-			# new key!
+		else {  # auth_key !in transaction_proxy 
+			# so new transaction
 			t_apr$ts_start = network_time();
 			t_apr$svc_resp = t_svc_resp;
 			t_apr$ts = ts;
@@ -518,8 +532,9 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 			schedule auth_fail_test_interval { auth_fail_test(auth_key) };
 			schedule trans_proxy_rem_interval { transaction_proxy_remove(auth_key) };
 
-			}
-		}
+			} # end auth_key !in transaction_proxy
+
+		} # end t_svc_name in transaction_services 
 
 	# process the transaction in terms of the source address
 	# the auth method will be passed along in the data field
