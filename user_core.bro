@@ -159,6 +159,7 @@ export {
 	const auth_fail_test_interval: interval = 10 sec &redef;
 
 } # end of export
+
 # -----------------------------------------------------------------------------------
 #  functions 
 # -----------------------------------------------------------------------------------
@@ -493,10 +494,13 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 			else {
 				# the record is false, so make decisions based on the auth_transaction event info		
 				if ( t_svc_resp == "ACCEPTED" ) {
+					# Process the transaction 
 					process = T;
 					t_apr$svc_resp = t_svc_resp;
 					}
 				if ( t_svc_resp == "FAILED" ) {
+					# Do not log another FAILED state (because there is already
+					#   one in place)
 					process = F;
 					t_apr$svc_resp =  t_svc_resp;
 					t_apr$svc_name = t_svc_name;
@@ -544,16 +548,20 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 			user_accept(ts, id$orig_h, id$resp_h, uid, t_svc_name, data);
 	
 		# now take care of the user account history
+		# The only interesting thing to keep track of is successful logins
+		#  since failed logins will pollute the statistical data
 		if ( process )
 			user_history(ts, id, uid, t_svc_name, t_svc_type, t_svc_resp, t_svc_auth, data);
 		}
 
 	if ( t_svc_resp == "FAILED" ) {
+
 		if ( process )
 			user_fail(ts, id$orig_h, id$resp_h, uid, t_svc_name, data);
 		}
 
 	if ( t_svc_resp == "POSTPONED" ) {
+
 		if ( process )
 			user_postponed(ts, id$orig_h, id$resp_h, uid, t_svc_name, data);
 		}
@@ -578,4 +586,6 @@ event auth_transaction_token(uid: string, session_key: string, data: string)
 event bro_init() &priority=5
 {
 	Log::create_stream(USER_CORE::LOG, [$columns=Info]);
+	local filter_c: Log::Filter = [$name="default", $path="user_core"];
+	Log::add_filter(LOG, filter_c);
 }

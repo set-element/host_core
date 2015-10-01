@@ -49,6 +49,7 @@ event bro_init()
 	n_act[SSHD_POLICY::SSHD_POL_DirTCPIP]		= ACT_L;
 	n_act[SSHD_POLICY::SSHD_POL_TunInit]		= ACT_L;
 	n_act[SSHD_POLICY::SSHD_POL_x11fwd]		= ACT_L;
+
 	n_act[SSHD_ANALYZER::SSHD_Hostile]		= ACT_P;
 	n_act[SSHD_ANALYZER::SSHD_SuspicousThreshold]	= ACT_E;
 	n_act[SSHD_ANALYZER::SSHD_Suspicous]		= ACT_L;
