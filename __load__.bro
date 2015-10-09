@@ -3,3 +3,4 @@
 #@load host_core/health_check.bro
 #@load host_core/sql_logger.bro
 @load host_core/user_hist_db.bro
+@load host_core/notice_action.bro
