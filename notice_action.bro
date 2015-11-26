@@ -9,12 +9,12 @@ module HOST_CORE_ACT;
 
 export {
 
-	global n_act: table[Notice::Type] of set[Notice::Action];
+	global n_act: table[Notice::Type] of set[Notice::Action] &redef;
 
 	# Set of people and places to contact - this can be in conjunction with or as a replacement
 	#  for the usual /etc/aliases foo that we end up using
-	const EmailList = "mail@example.com" &redef;
-	const PageList  = "page@example.com" &redef;
+	global EmailList = "mail@example.com" &redef;
+	global PageList  = "page@example.com" &redef;
 
 	# Set values that will be consumed by the action handler
 	redef Notice::mail_page_dest = PageList;
@@ -29,7 +29,7 @@ export {
 	}
 
 event bro_init()
-{	
+{
 	n_act[SSHD_POLICY::SSHD_RemoteExecHostile]	= ACT_P;
 	n_act[SSHD_POLICY::SSHD_Suspicous]		= ACT_E;
 	n_act[SSHD_POLICY::SSHD_SuspicousThreshold]	= ACT_E;
@@ -50,10 +50,23 @@ event bro_init()
 	n_act[SSHD_POLICY::SSHD_POL_TunInit]		= ACT_L;
 	n_act[SSHD_POLICY::SSHD_POL_x11fwd]		= ACT_L;
 
+  # these may or may not be loaded so do a little filtering
+@ifdef(SSHD_ANALYZER::SSHD_Hostile)
 	n_act[SSHD_ANALYZER::SSHD_Hostile]		= ACT_P;
+@endif
+
+@ifdef(SSHD_ANALYZER::SSHD_SuspicousThreshold)
 	n_act[SSHD_ANALYZER::SSHD_SuspicousThreshold]	= ACT_E;
+@endif
+
+@ifdef(SSHD_ANALYZER::SSHD_Suspicous)
 	n_act[SSHD_ANALYZER::SSHD_Suspicous]		= ACT_L;
+@endif
+
+@ifdef(SSHD_ANALYZER::SSHD_RemoteExecHostile)
 	n_act[SSHD_ANALYZER::SSHD_RemoteExecHostile]	= ACT_P;
+@endif
+
 }
 
 hook Notice::policy(n: Notice::Info) &priority=6
