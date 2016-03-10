@@ -3,7 +3,7 @@
 # This defines a set of functions and tables which will knit together authentication information
 #  from the sshd and syslog policy.
 #
-# 
+#
 @load host_core/user_hist_db
 
 module USER_CORE;
@@ -23,13 +23,13 @@ export {
 		USER_AUTHUidPasswdCollision,	# two accounts have the same password
 	};
 
-	# The USER_CORE logging stream identifier	
+	# The USER_CORE logging stream identifier
 	redef enum Log::ID += { LOG };
 
-        # -----------------------------------------------------------------------------------
-        #  DATA STRUCTS AND TABLES
-        # -----------------------------------------------------------------------------------
-
+  # -----------------------------------------------------------------------------------
+  #  DATA STRUCTS AND TABLES
+  # -----------------------------------------------------------------------------------
+  #
 	# record used to log transactions related to A&A
 	type Info: record {
 		# Record for user transaction
@@ -60,24 +60,24 @@ export {
 		dest_a: table[addr] of count;		# list of host:count fail pairs
 		};
 
-	# record to track *uid* behavior 
+	# record to track *uid* behavior
 	type uid_rec: record {
 		from_net: table[subnet] of count;
 		total: count &default=0;
 		};
 
-	# this record holds on to the auth_transaction information for syslog-ssh and 
+	# this record holds on to the auth_transaction information for syslog-ssh and
 	#   isshd auth data as PAM and whatnot figures out just what is going on.
 	# First two values are for infrastructure, the last set are for holding on
 	#   to the actual data in question.
 	#
-	type auth_proxy_rec: record {
+	type auth_temp_rec: record {
 		ts_start: time;
 		svc_resp: string &default="UNKNOWN";
 		#
-		ts: time; 
-		key: string &default="NULL"; 
-		id: conn_id; 
+		ts: time;
+		key: string &default="NULL";
+		id: conn_id;
 		uid: string &default="NULL";
 		host: string &default="NULL";
 		svc_name: string &default="NULL";
@@ -87,19 +87,19 @@ export {
 		};
 
 	# Table to hold the transaction proxy data
-	# Index in this case will be provided by sha1(uid+sip_sport) 
-	global transaction_proxy: table[string] of auth_proxy_rec;
+	# Index in this case will be provided by sha1(uid+sip_sport)
+	global transaction_proxy: table[string] of auth_temp_rec;
 	global transaction_services: set[string] &redef;
 
 	# data table for address behavior
-	global login_data: table[addr] of addr_rec &persistent;
+	global login_ip_data: table[addr] of addr_rec &persistent;
 	# data table for uid behavior
-	global uid_data: table[string] of uid_rec &persistent;
+	global login_uid_data: table[string] of uid_rec &persistent;
 
-	# Identifying maps between uid and authentication token requires a 
+	# Identifying maps between uid and authentication token requires a
 	#   successful login for the information to be useful.  This is a table
 	#   to hold all authentication data for a short period of time.
-	# A fingerprint here means 
+	# A fingerprint here means
 	#
 	#  Map of session-key -> fingerprint
 	global uid_cred_cache: table[string] of string &write_expire=1 min &redef;
@@ -108,12 +108,12 @@ export {
 
 	# do we log via sqlite?
 	const log_sqlite = F &redef;
-	
+
 	#
-        # -----------------------------------------------------------------------------------
-        # GLOBAL FUNCTIONS
-        # -----------------------------------------------------------------------------------
-	
+  # -----------------------------------------------------------------------------------
+  # GLOBAL FUNCTIONS
+  # -----------------------------------------------------------------------------------
+  #
 	# general interface is the auth_transaction() event which drives the following functions:
 
 	global user_accept: function(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, key: string);
@@ -126,10 +126,11 @@ export {
 	global auth_key_fingerprint_3: event(ts: time, version: string, sid: string, cid: count, fingerprint: string, key_type: string);
 	global auth_transaction: event(ts: time, key: string, id: conn_id, uid: string, host: string, svc_name: string, svc_type: string, svc_resp: string, svc_auth: string, data: string);
 	global auth_transaction_token: event(uid: string, session_key: string, data: string);
-        # -----------------------------------------------------------------------------------
-        # CONFIGURATION
-        # -----------------------------------------------------------------------------------
 
+  # -----------------------------------------------------------------------------------
+  # CONFIGURATION
+  # -----------------------------------------------------------------------------------
+  #
 	# number of individual hosts the s_addr can fail
 	global sshd_r_addr_thresh: count = 20 &redef;
 	# number of fails per account
@@ -141,7 +142,7 @@ export {
 
 	const suspicious_accounts = { "lp", "toor", "admin", "test", "r00t", "bash", } &redef;
 	const remote_accounts = { "root", "system", "operator","lp", "toor", "admin", "test", "r00t", "bash", "guest", "user", } &redef;
-		
+
 	const skip_login_dest = { 128.55.15.11, } &redef;
 	const host_whitelist = { 128.55.16.16, } &redef;
 	const net_whitelist = { 128.55.0.0/16, } &redef;
@@ -161,30 +162,30 @@ export {
 } # end of export
 
 # -----------------------------------------------------------------------------------
-#  functions 
+#  functions
 # -----------------------------------------------------------------------------------
 
 function test_addr(a: addr) : addr_rec
 {
 	# return a set up addr_rec
 	local t_AR: addr_rec;
-	local t_fud: table[string] of count;
+	local t_fuid: table[string] of count;
 	local t_uid: set[string];
 	local t_dest: table[addr] of count;
 
-	if ( a !in login_data ) {
+	if ( a !in login_ip_data ) {
 
-		t_AR$fail_uid = t_fud;
+		t_AR$fail_uid = t_fuid;
 		t_AR$accept_uid = t_uid;
 		t_AR$total_login_fail = 0;
 		t_AR$total_login_accept = 0;
 		t_AR$total_host_fail = 0;
 		t_AR$dest_a = t_dest;
 
-		login_data[a] = t_AR;
+		login_ip_data[a] = t_AR;
 		}
 	else
-		t_AR = login_data[a];
+		t_AR = login_ip_data[a];
 
 	return t_AR;
 }
@@ -193,8 +194,8 @@ function test_uid(uid: string): uid_rec
 {
 	local t_UR: uid_rec;
 
-	if ( uid in uid_data )
-		t_UR = uid_data[uid];
+	if ( uid in login_uid_data )
+		t_UR = login_uid_data[uid];
 	else {
 		# this is a new record so build data structs and set any values needed
 		local t_sub: table[subnet] of count;
@@ -276,13 +277,13 @@ function user_history(ts: time, id: conn_id, uid: string, svc_name: string, svc_
 		#   if ( n > T1 ) and ( b < T2 ) out of box logins are rare.
 		#   if ( n > T1 )                general logging scenerio...
 		#
-			local n = t_UR$total;		# number data points
-			local b = |t_UR$from_net|;	# number of buckets
+				local n = t_UR$total;		# number data points
+				local b = |t_UR$from_net|;	# number of buckets
 		# come back to this ...
 
 			NOTICE([$note=USER_AUTHNewSub,
 				$msg=fmt("new subnet %s for %s [%s]", uid, t_net, b)]);
-			
+
 			t_UR$from_net[t_net] = 1;
 			++t_UR$total;
 
@@ -290,8 +291,9 @@ function user_history(ts: time, id: conn_id, uid: string, svc_name: string, svc_
 		}
 	}
 
-	uid_data[uid] = t_UR;
+	login_uid_data[uid] = t_UR;
 
+	# Here load the
 	SQLITE::auth_wayback_transaction(ts, id, uid, svc_name, svc_type, svc_resp, svc_auth, data);
 
 	return ret_val;
@@ -310,12 +312,12 @@ function user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src
 
 	if ( uid in remote_accounts && !Site::is_local_addr(s_addr) ) {
 		# This account should never be seen to log in successfully
-		#  from off site.  Depending on how the NOTICE is handeled, 
+		#  from off site.  Depending on how the NOTICE is handeled,
 		#  we may alarm, drop etc based on local policy.
 		NOTICE([$note=SensitiveRemoteLogin,
 			$msg=fmt("%s -> %s@%s successful sensitive remote login",
 				s_addr, uid, r_addr)]);
-		}	
+		}
 
 	++t_AR$total_login_accept;
 
@@ -328,7 +330,7 @@ function user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src
 	++t_AR$dest_a[r_addr];
 
 	# save value
-	login_data[s_addr] = t_AR;
+	login_ip_data[s_addr] = t_AR;
 
 	# now do a quick check to see if there are collisions in the auth token...
 	if ( key in uid_cred_cache ) {
@@ -339,7 +341,7 @@ function user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src
 
 		# now get cached uid
 		if ( t_key in uid_lookup ) {
-			t_uid = uid_lookup[t_key];	
+			t_uid = uid_lookup[t_key];
 
 			if ( t_uid != uid ) {
 
@@ -371,7 +373,7 @@ function user_fail(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: 
 
 	# sshd_fail_total: total number of failes per source ip
 	if ( ++t_AR$total_login_fail == sshd_fail_total ) {
-		
+
 		NOTICE([$note=USER_AUTH_FailTot,
 			$msg=fmt("host %s failed %s total logins", s_addr, sshd_fail_total)]);
 	}
@@ -380,11 +382,11 @@ function user_fail(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: 
 		t_AR$fail_uid[uid] = 0;
 		}
 
-	# total number of fails per account	
+	# total number of fails per account
 	if ( ++t_AR$fail_uid[uid] == sshd_per_account ) {
 
 		NOTICE([$note=USER_AUTH_UidFail,
-			$msg=fmt("host %s failed %s total logins for %s", 
+			$msg=fmt("host %s failed %s total logins for %s",
 				s_addr, sshd_per_account, uid)]);
 	}
 
@@ -417,13 +419,13 @@ function user_postponed(ts: time, s_addr: addr, r_addr: addr, uid: string, data_
 
 }
 
-event auth_fail_test(auth_key: string) 
+event auth_fail_test(auth_key: string)
 {
 	# This event will test the transaction_proxt table and test of the session attached to
 	#   the key has a final disposition of "FAILED".  In this case call the user_fail function
 	#   without the log_only flag set.
 	#
-	local t_apr: auth_proxy_rec;
+	local t_apr: auth_temp_rec;
 	if ( auth_key in transaction_proxy ) {
 		t_apr = transaction_proxy[auth_key];
 
@@ -452,15 +454,17 @@ event transaction_proxy_remove(auth_key: string)
 # service response ('ACCEPTED', 'FAILED' and 'POSTPONED') (prev called authmsg)
 #  the set can be extended via the usual event hyjinx...
 #
-# Since any number of entries can come rolling along for a given set of {uid,orig_h,orig_p} 
+# Since any number of entries can come rolling along for a given set of {uid,orig_h,orig_p}
 #   both in terms of PAM fun as well as data coming in from both isshd and syslog
-#   we need a way to normalize this mess.  For now an auth_key is generated from these 
+#   we need a way to normalize this mess.  For now an auth_key is generated from these
 #   values and passed on.  We wait on this value in the proxy table untill an "ACCEPTED"
 #   is seen or the timeout period happens (default FAIL).
 #
 event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: string, svc_name: string, svc_type: string, svc_resp: string, svc_auth: string, data: string)
 {
 	# first normalize all the non-case sensitive informaiton
+	# name type response auth_type, ex:
+	# ISSHD	AUTHENTICATION	FAILED	PASSWORD
 	local t_svc_name = to_upper(svc_name);
 	local t_svc_type = to_upper(svc_type);
 	local t_svc_resp = to_upper(svc_resp);
@@ -471,7 +475,7 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 
 	if ( t_svc_name in transaction_services ) {
 		# we will need one of these...
-		local t_apr: auth_proxy_rec;
+		local t_apr: auth_temp_rec;
 		process = F;
 		# create the key
 		local auth_key = fmt("%s", sha1_hash(uid,id$orig_h,id$orig_p));
@@ -480,11 +484,11 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 
 			t_apr = transaction_proxy[auth_key];
 
-			# If the svc_resp value for the t_apr struct has already been 
+			# If the svc_resp value for the t_apr struct has already been
 			#   set to "ACCEPTED", then the auth has already been successful
 			#   and we can just move along wo/ further logging.
-			#   
-			#   The key remains in place to identify the session auth 
+			#
+			#   The key remains in place to identify the session auth
 			#   status has been set.
 			#
 			if ( t_apr$svc_resp == "ACCEPTED" ) {
@@ -492,9 +496,10 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 				process = F;
 				}
 			else {
-				# the record is false, so make decisions based on the auth_transaction event info		
+				
+				# the record is false, so make decisions based on the auth_transaction event info
 				if ( t_svc_resp == "ACCEPTED" ) {
-					# Process the transaction 
+					# Process the transaction
 					process = T;
 					t_apr$svc_resp = t_svc_resp;
 					}
@@ -512,7 +517,7 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 			# update the stored struct
 			transaction_proxy[auth_key] = t_apr;
 			}
-		else {  # auth_key !in transaction_proxy 
+		else {  # auth_key !in transaction_proxy
 			# so new transaction
 			t_apr$ts_start = network_time();
 			t_apr$svc_resp = t_svc_resp;
@@ -528,7 +533,7 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 
 			transaction_proxy[auth_key] = t_apr;
 
-			if ( t_svc_resp == "ACCEPTED" ) 
+			if ( t_svc_resp == "ACCEPTED" )
 				process = T;
 			else
 				process = F;
@@ -538,7 +543,7 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 
 			} # end auth_key !in transaction_proxy
 
-		} # end t_svc_name in transaction_services 
+		} # end t_svc_name in transaction_services
 
 	# process the transaction in terms of the source address
 	# the auth method will be passed along in the data field
@@ -546,7 +551,7 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 		# user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, aux: string, key: string)
 		if ( process )
 			user_accept(ts, id$orig_h, id$resp_h, uid, t_svc_name, data);
-	
+
 		# now take care of the user account history
 		# The only interesting thing to keep track of is successful logins
 		#  since failed logins will pollute the statistical data
@@ -575,11 +580,11 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 #  Current set of use cases: AUTH_KEY_FINGERPRINT and AUTH_PASS_ATTEMPT
 #  Since passing auth token is decoupled from the response, there has to be a short lived
 #    queue of values that is registered when a user is successfully authenticated.  There is
-#    probably a better way, but this will do for now ... 
+#    probably a better way, but this will do for now ...
 #  To identify the keys, the [session key] is attached to the [authentication key] and moved in the data field
 event auth_transaction_token(uid: string, session_key: string, data: string)
 {
-	# set the cache table value	
+	# set the cache table value
 	uid_cred_cache[session_key] = data;
 }
 
