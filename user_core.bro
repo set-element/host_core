@@ -238,7 +238,7 @@ function log_transaction(ts: time, key: string, id: conn_id, uid: string, host: 
 	Log::write(LOG, t_Info);
 
 	local origh = fmt("%s", id$orig_h);
-	LOGIN_HISTORY_FRONT::process_login(uid,origh,"VERSION");
+	USER_HIST_FRONT::process_login(uid,origh,"VERSION");
 
 	return ret;
 }
