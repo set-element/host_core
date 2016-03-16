@@ -4,7 +4,7 @@
 #  from the sshd and syslog policy.
 #
 #
-@load host_core/user_hist_db
+@load host_core/broker_store_front
 
 module USER_CORE;
 
