@@ -1,7 +1,7 @@
 # 10/29/2014 Scott Campbell
 #
 @load isshd_policy
-@load SyslogReader
+#@load SyslogReader
  
 module HOST_HEALTH;
 
@@ -30,7 +30,7 @@ event measure()
 	local sshd_s_rec = |SSHD_CORE::s_records|;
 	local sshd_c_lkp = |SSHD_CORE::cid_lookup|;
 
-	local syslog_rps = SYSLOG_PARSE::input_count_delta;
+	#local syslog_rps = SYSLOG_PARSE::input_count_delta;
 
 	local t_Info: Info;
 	t_Info$sshd_rps = sshd_rps;
