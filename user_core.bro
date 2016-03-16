@@ -237,6 +237,9 @@ function log_transaction(ts: time, key: string, id: conn_id, uid: string, host: 
 	# and print the results
 	Log::write(LOG, t_Info);
 
+	local origh = fmt("%s", id$orig_h);
+	LOGIN_HISTORY_FRONT::process_login(uid,origh,"VERSION");
+
 	return ret;
 }
 
@@ -292,9 +295,6 @@ function user_history(ts: time, id: conn_id, uid: string, svc_name: string, svc_
 	}
 
 	login_uid_data[uid] = t_UR;
-
-	# Here load the
-	SQLITE::auth_wayback_transaction(ts, id, uid, svc_name, svc_type, svc_resp, svc_auth, data);
 
 	return ret_val;
 }
@@ -354,10 +354,6 @@ function user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src
 			uid_lookup[t_key] = uid;
 			}
 		}
-
-@ifdef (SQLITE::auth_logger)
-		event SQLITE::auth_logger(uid, mask_addr(s_addr, bitmap_box), data_src);
-@endif
 
 	return;
 }
