@@ -38,7 +38,7 @@ event measure()
 	t_Info$sshd_s_rec = sshd_s_rec;
 	t_Info$sshd_c_lkp = sshd_c_lkp;
 	t_Info$ts = network_time();
-	t_Info$syslog_rps = syslog_rps;
+	#t_Info$syslog_rps = syslog_rps;
 
 	Log::write(LOG, t_Info);
 
