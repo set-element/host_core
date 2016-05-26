@@ -4,7 +4,6 @@
 #  from the sshd and syslog policy.
 #
 #
-@load host_core/broker_store_front
 
 module USER_CORE;
 
@@ -237,8 +236,10 @@ function log_transaction(ts: time, key: string, id: conn_id, uid: string, host: 
 	# and print the results
 	Log::write(LOG, t_Info);
 
-	local origh = fmt("%s", id$orig_h);
-	USER_HIST_FRONT::process_login(uid,origh,"VERSION");
+	# Only do historical analysis on successful logins
+	if ( svc_resp == "ACCEPTED" ) {
+		local origh = fmt("%s", id$orig_h);
+		}
 
 	return ret;
 }
@@ -589,4 +590,9 @@ event bro_init() &priority=5
 	Log::create_stream(USER_CORE::LOG, [$columns=Info]);
 	local filter_c: Log::Filter = [$name="default", $path="user_core"];
 	Log::add_filter(LOG, filter_c);
+
+	BrokerComm::enable();
+	BrokerComm::connect("127.0.0.1", 9999/tcp, 1sec);
+	BrokerComm::auto_event("bro/event", USER_CORE::auth_transaction);
+	BrokerComm::auto_event("bro/event", auth_transaction);
 }
