@@ -4,6 +4,7 @@
 #  from the sshd and syslog policy.
 #
 #
+#@load remote_logging/remote_logger_s
 
 module USER_CORE;
 
@@ -20,6 +21,8 @@ export {
 		USER_AUTHNewKey,		# Key replacement for uid
 		USER_AUTHUidKeyCollision,	# two accounts have the same public key
 		USER_AUTHUidPasswdCollision,	# two accounts have the same password
+
+		USER_AUTH_ForbidLogin,		# account login from a non-whitlisted address
 	};
 
 	# The USER_CORE logging stream identifier
@@ -108,6 +111,9 @@ export {
 	# do we log via sqlite?
 	const log_sqlite = F &redef;
 
+	# table to hold whitelist address set for a given account
+	#  ex root can log in from [ a1, a2, a3]
+	global restricted_accounts_whitelist: table[string] of set[addr] &redef;
 	#
   # -----------------------------------------------------------------------------------
   # GLOBAL FUNCTIONS
@@ -115,7 +121,7 @@ export {
   #
 	# general interface is the auth_transaction() event which drives the following functions:
 
-	global user_accept: function(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, key: string);
+	global user_accept: function(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, key: string, host: string, t_svc_auth: string);
 	global user_fail: function(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, key: string);
 	global user_postponed: function(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, key: string);
 	global user_invalid: function(s_addr: addr, r_addr: addr, uid: string);
@@ -139,12 +145,13 @@ export {
 	# total number of failed accounts
 	global sshd_num_fail_accts: count = 10 &redef;
 
-	const suspicious_accounts = { "lp", "toor", "admin", "test", "r00t", "bash", } &redef;
-	const remote_accounts = { "root", "system", "operator","lp", "toor", "admin", "test", "r00t", "bash", "guest", "user", } &redef;
+	global restricted_accounts = { "root", } &redef;
+	global remote_accounts = { "root", "system", "operator","lp", "toor", "admin", "test", "r00t", "bash", "guest", "user", } &redef;
 
-	const skip_login_dest = { 128.55.15.11, } &redef;
-	const host_whitelist = { 128.55.16.16, } &redef;
-	const net_whitelist = { 128.55.0.0/16, } &redef;
+	global skip_login_dest = { 128.55.15.11, } &redef;
+	global host_whitelist = { 128.55.16.16, } &redef;
+	global net_whitelist = { 128.55.0.0/16, } &redef;
+	global rfc_1918 = { 10.0.0.0/8, 192.168.0.0/16, } &redef;
 
 	# how many logins must be seen before a uid is checked against it's history?
 	const uid_login_threshold: count = 10 &redef;
@@ -239,6 +246,7 @@ function log_transaction(ts: time, key: string, id: conn_id, uid: string, host: 
 	# Only do historical analysis on successful logins
 	if ( svc_resp == "ACCEPTED" ) {
 		local origh = fmt("%s", id$orig_h);
+		#USER_HIST_FRONT::process_login(uid,origh,"VERSION");
 		}
 
 	return ret;
@@ -300,7 +308,7 @@ function user_history(ts: time, id: conn_id, uid: string, svc_name: string, svc_
 	return ret_val;
 }
 
-function user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, key: string)
+function user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, key: string, host: string, t_svc_auth: string)
 {
 	# General successful authentication function
 	#
@@ -317,8 +325,22 @@ function user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src
 		#  we may alarm, drop etc based on local policy.
 		NOTICE([$note=SensitiveRemoteLogin,
 			$msg=fmt("%s -> %s@%s successful sensitive remote login",
-				s_addr, uid, r_addr)]);
+				s_addr, uid, host)]);
 		}
+
+
+	# There is anoother set of accounts that are only allowed logins
+	#  from /within/ a cluster.  The initial test will be based on 
+	#  the source address comparing against an address whitelist,
+	#  the auth type and if the source ip is in RFC1918 space.
+	#
+	local s_addr_string = fmt("%s",s_addr);
+	if ( uid in restricted_accounts && s_addr !in rfc_1918 && t_svc_auth != "HOSTBASED" && s_addr !in restricted_accounts_whitelist[uid] ) {
+		NOTICE([$note=USER_AUTH_ForbidLogin,
+			$msg=fmt("%s -> %s@%s %s successful login",
+				s_addr, uid, host, t_svc_auth)]);
+		}
+
 
 	++t_AR$total_login_accept;
 
@@ -547,7 +569,7 @@ event auth_transaction(ts: time, key: string, id: conn_id, uid: string, host: st
 	if ( t_svc_resp == "ACCEPTED" ) {
 		# user_accept(ts: time, s_addr: addr, r_addr: addr, uid: string, data_src: string, aux: string, key: string)
 		if ( process )
-			user_accept(ts, id$orig_h, id$resp_h, uid, t_svc_name, data);
+			user_accept(ts, id$orig_h, id$resp_h, uid, t_svc_name, data, host, t_svc_auth);
 
 		# now take care of the user account history
 		# The only interesting thing to keep track of is successful logins
@@ -592,7 +614,8 @@ event bro_init() &priority=5
 	Log::add_filter(LOG, filter_c);
 
 	BrokerComm::enable();
-	BrokerComm::connect("127.0.0.1", 9999/tcp, 1sec);
+	BrokerComm::connect("128.55.195.21", 9999/tcp, 1sec);
 	BrokerComm::auto_event("bro/event", USER_CORE::auth_transaction);
 	BrokerComm::auto_event("bro/event", auth_transaction);
+	#BrokerComm::subscribe_to_events("bro/notice");
 }
